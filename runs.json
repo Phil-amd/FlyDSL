@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "updated": "2026-07-13T11:44:51Z",
+ "updated": "2026-07-13T18:21:16Z",
  "repo": "Phil-amd/FlyDSL",
  "runs": [
   {
@@ -52,7 +52,7 @@
    "commit": "e065a8a9748a7d05b669445df4da1906764389fa",
    "branch": "main",
    "event": "push",
-   "title": "Skip GPU CI for non-code changes",
+   "title": "Fly DSL test",
    "status": "completed",
    "conclusion": "cancelled",
    "url": "https://github.com/Phil-amd/FlyDSL/actions/runs/28791259843",
@@ -95,7 +95,7 @@
    "commit": "b5f188dfbbb6dcd5bd059233147695b8732fb2d5",
    "branch": "main",
    "event": "push",
-   "title": "Update README repository layout",
+   "title": "Fly DSL test",
    "status": "completed",
    "conclusion": "cancelled",
    "url": "https://github.com/Phil-amd/FlyDSL/actions/runs/28789619120",
