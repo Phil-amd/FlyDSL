@@ -51,106 +51,93 @@ FLASH_ATTN_FUNC_KERNEL_CONFIG: dict = {
     "dualwave_swp_enable_stagger": True,
 }
 
-# (batch, seq_len, num_heads, num_kv_heads, head_dim, num_kv_splits)
+# (batch, seq_len, num_heads, num_kv_heads, num_kv_splits)
 # num_kv_heads == num_heads -> MHA; num_kv_heads < num_heads -> GQA/MQA.
-# num_kv_splits > 1 -> split-K path (gfx950 DUALWAVE_SWP only, seq_len >= 384, D=128).
+# num_kv_splits > 1 -> split-K path (gfx950 DUALWAVE_SWP only, seq_len >= 384, D=64/128).
 DEFAULT_CONFIGS = [
     # set1
-    (16, 8192, 64, 64, 128, 1),
-    (16, 8192, 64, 8, 128, 1),
-    (2, 1024, 64, 64, 128, 1),
+    (16, 8192, 64, 64, 1),
+    (16, 8192, 64, 8, 1),
+    (2, 1024, 64, 64, 1),
     # set2
-    (8, 128, 64, 64, 128, 1),
-    (8, 256, 64, 64, 128, 1),
-    (8, 512, 64, 64, 128, 1),
-    (1, 128, 64, 64, 128, 1),
-    (1, 256, 64, 64, 128, 1),
-    (1, 384, 64, 64, 128, 1),
-    (1, 512, 64, 64, 128, 1),
-    (1, 1024, 64, 64, 128, 1),
-    (1, 2048, 64, 64, 128, 1),
-    (1, 4096, 64, 64, 128, 1),
-    (1, 8192, 64, 64, 128, 1),
-    (4, 8192, 64, 64, 128, 1),
-    (1, 2048, 32, 32, 128, 1),
-    (1, 4096, 32, 32, 128, 1),
-    (1, 8192, 32, 32, 128, 1),
-    (8, 8192, 32, 32, 128, 1),
-    (1, 2048, 16, 16, 128, 1),
-    (1, 4096, 16, 16, 128, 1),
-    (1, 8192, 16, 16, 128, 1),
-    (16, 8192, 16, 16, 128, 1),
-    (1, 2048, 8, 8, 128, 1),
-    (1, 4096, 8, 8, 128, 1),
-    (1, 8192, 8, 8, 128, 1),
-    (32, 8192, 8, 8, 128, 1),
+    (8, 128, 64, 64, 1),
+    (8, 256, 64, 64, 1),
+    (8, 512, 64, 64, 1),
+    (1, 128, 64, 64, 1),
+    (1, 256, 64, 64, 1),
+    (1, 384, 64, 64, 1),
+    (1, 512, 64, 64, 1),
+    (1, 1024, 64, 64, 1),
+    (1, 2048, 64, 64, 1),
+    (1, 4096, 64, 64, 1),
+    (1, 8192, 64, 64, 1),
+    (4, 8192, 64, 64, 1),
+    (1, 2048, 32, 32, 1),
+    (1, 4096, 32, 32, 1),
+    (1, 8192, 32, 32, 1),
+    (8, 8192, 32, 32, 1),
+    (16, 8192, 16, 16, 1),
+    (1, 8192, 16, 16, 1),
+    (1, 2048, 16, 16, 1),
+    (1, 4096, 16, 16, 1),
+    (1, 2048, 8, 8, 1),
+    (1, 4096, 8, 8, 1),
+    (1, 8192, 8, 8, 1),
+    (32, 8192, 8, 8, 1),
     # set3
-    (1, 8192, 2, 2, 128, 4),
-    (1, 4096, 2, 2, 128, 4),
-    (1, 2048, 4, 4, 128, 4),
-    (1, 8192, 4, 4, 128, 2),
+    (1, 8192, 2, 2, 4),
+    (1, 4096, 2, 2, 4),
+    (1, 2048, 4, 4, 4),
+    (1, 8192, 4, 4, 2),
     # set4
-    (1, 98144, 3, 3, 128, 5),
-    (1, 147216, 3, 3, 128, 5),
-    (1, 196288, 3, 3, 128, 5),
-    (1, 245360, 3, 3, 128, 5),
-    (1, 294432, 3, 3, 128, 5),
-    (1, 12268, 24, 24, 128, 1),
-    (1, 18402, 24, 24, 128, 1),
-    (1, 24536, 24, 24, 128, 1),
-    (1, 30670, 24, 24, 128, 2),
-    (1, 36804, 24, 24, 128, 2),
-    (1, 32768, 24, 24, 128, 1),
-    (1, 32768, 32, 32, 128, 1),
+    (1, 98144, 3, 3, 5),
+    (1, 147216, 3, 3, 5),
+    (1, 196288, 3, 3, 5),
+    (1, 245360, 3, 3, 5),
+    (1, 294432, 3, 3, 5),
+    (1, 12268, 24, 24, 1),
+    (1, 18402, 24, 24, 1),
+    (1, 24536, 24, 24, 1),
+    (1, 30670, 24, 24, 2),
+    (1, 36804, 24, 24, 2),
+    (1, 32768, 24, 24, 1),
+    (1, 32768, 32, 32, 1),
     # set5
-    (1, 64, 4, 4, 128, 1),
-    (1, 30, 4, 4, 128, 1),
-    (1, 1, 4, 4, 128, 1),
-    (2, 7, 4, 4, 128, 1),
-    (3, 31, 3, 3, 128, 1),
-    (5, 33, 5, 5, 128, 1),
-    (5, 63, 7, 7, 128, 1),
-    (3, 65, 3, 3, 128, 1),
+    (3, 64, 4, 4, 1),
+    (3, 1, 4, 4, 1),
+    (3, 31, 4, 4, 1),
+    (3, 33, 4, 4, 1),
+    (2, 63, 4, 4, 1),
+    (2, 65, 4, 4, 1),
+    (2, 127, 4, 4, 1),
+    (2, 129, 4, 4, 1),
+    (1, 255, 4, 4, 1),
+    (1, 257, 4, 4, 1),
+    (1, 511, 4, 4, 1),
+    (1, 513, 4, 4, 1),
 ]
 
 # Additional dense/varlen/cross-length cases.
-# Rows: [Sq, Skv, B, H, Hkv, D, kv_splits].
+# Rows: [Sq, Skv, B, H, Hkv, kv_splits].
 # Skv=None means packed varlen self-attn; B=None means packed varlen cross-attn.
+# D is swept separately by head_dims_to_test.
 EXTRA_CONFIGS = [
     # varlen
-    [[1024, 8192], None, None, 64, 64, 128, 1],
-    [[512, 256, 1024, 128], None, None, 64, 64, 128, 1],  # uneven; MHA
-    [[300, 700, 500], None, None, 32, 32, 128, 1],  # non-256/64-multiple
-    [[1024, 1024], None, None, 64, 8, 128, 1],  # even, GQA
-    [[1, 3, 31, 33, 63, 65], None, None, 16, 16, 128, 1],  # small + non-multiple
+    [[1024, 1024], None, None, 64, 64, 1],
+    [[1024, 8192], None, None, 64, 8, 1],
+    [[1024, 8192, 3, 31, 65, 127], None, None, 64, 8, 1],
+    [[1, 3, 31, 33, 63, 65], None, None, 64, 64, 1],
     # cross-length
-    [31, 65, 1, 64, 8, 128, 1],
-    [31, 100, 1, 64, 8, 128, 1],
-    [31, 127, 1, 64, 8, 128, 1],
-    [31, 1024, 1, 64, 8, 128, 1],
-    [31, 8192, 1, 64, 8, 128, 1],
-    [65, 31, 1, 64, 8, 128, 1],
-    [65, 127, 1, 64, 8, 128, 1],
-    [65, 1024, 1, 64, 8, 128, 1],
-    [65, 8192, 1, 64, 8, 128, 1],
-    [100, 31, 1, 64, 8, 128, 1],
-    [100, 127, 1, 64, 8, 128, 1],
-    [100, 8192, 1, 64, 8, 128, 1],
-    [127, 31, 1, 64, 8, 128, 1],
-    [127, 1024, 1, 64, 8, 128, 1],
-    [127, 8192, 1, 64, 8, 128, 1],
-    [1024, 31, 1, 64, 8, 128, 1],
-    [1024, 100, 1, 64, 8, 128, 1],
-    [1024, 8192, 1, 64, 8, 128, 1],
-    [8192, 65, 1, 64, 8, 128, 1],
-    [8192, 127, 1, 64, 8, 128, 1],
-    [8192, 1024, 1, 64, 8, 128, 1],
+    [31, 65, 1, 64, 8, 1],
+    [63, 33, 1, 64, 8, 1],
+    [129, 255, 1, 64, 8, 1],
+    [257, 127, 1, 64, 8, 1],
+    [1024, 8192, 1, 64, 8, 1],
+    [8192, 1024, 1, 64, 8, 1],
     # varlen cross-length
-    [[1024, 8192], [8192, 1024], None, 64, 64, 128, 1],
-    [[512, 256, 1024, 128], [256, 512, 512, 256], None, 64, 8, 128, 1],
-    [[300, 700, 500], [700, 300, 500], None, 32, 32, 128, 1],  # non-multiple
-    [[1024, 31], [31, 1024], None, 64, 8, 128, 1],  # extreme q>>kv/q<<kv
-    [[1, 65, 127, 333], [200, 64, 31, 100], None, 16, 16, 128, 1],
+    [[1024, 8192], [8192, 1024], None, 64, 8, 1],
+    [[31, 33, 63, 65], [65, 63, 33, 31], None, 64, 64, 1],
+    [[127, 129, 255, 257], [257, 255, 129, 127], None, 64, 8, 1],
 ]
 
 
@@ -160,14 +147,13 @@ def _short_label(value):
 
 
 def _extra_case_from_config(row):
-    seqlen_q, seqlen_kv, batch, nh, nh_kv, hd, kv_splits = row
+    seqlen_q, seqlen_kv, batch, nh, nh_kv, kv_splits = row
     if seqlen_kv is None:
         return {
             "sq_label": _short_label(seqlen_q),
             "skv_label": _short_label(seqlen_q),
             "nh": nh,
             "nh_kv": nh_kv,
-            "hd": hd,
             "kv_splits": kv_splits,
             "kwargs": {"varlen_seqlens_q": list(seqlen_q)},
         }
@@ -177,7 +163,6 @@ def _extra_case_from_config(row):
             "skv_label": f"[{seqlen_kv}]",
             "nh": nh,
             "nh_kv": nh_kv,
-            "hd": hd,
             "kv_splits": kv_splits,
             "kwargs": {"batch": batch, "seqlen_q": seqlen_q, "seqlen_kv": seqlen_kv},
         }
@@ -186,7 +171,6 @@ def _extra_case_from_config(row):
         "skv_label": _short_label(seqlen_kv),
         "nh": nh,
         "nh_kv": nh_kv,
-        "hd": hd,
         "kv_splits": kv_splits,
         "kwargs": {"varlen_seqlens_q": list(seqlen_q), "varlen_seqlens_kv": list(seqlen_kv)},
     }
@@ -925,7 +909,7 @@ def run_attn_config(
 
     # ── split-K early-exit guard (mirrors run_splitk_config logic) ───────────
     if splitk:
-        if D != 128 or dtype_str not in ("bf16", "f16") or (seqlen_q is not None and seqlen_q < 384):
+        if D not in (64, 128) or dtype_str not in ("bf16", "f16") or (seqlen_q is not None and seqlen_q < 384):
             return {"skip": True}
 
     if use_block_table and (precomputed_inputs is None or precomputed_ref is None):
@@ -1064,7 +1048,14 @@ def run_attn_config(
     if verbose:
         o_flat = o_t.reshape(-1)
         ref_flat = ref_t.reshape(-1)
-        tag = f"B={B} Sq={Sq} H={H} D={D}"
+        _mask = "causal" if causal else "noncausal"
+        _hkv = num_kv_heads if num_kv_heads is not None else H
+        if varlen:
+            tag = f"varlen Sq={list(vl_q)} Skv={list(vl_kv)} H={H} Hkv={_hkv} D={D} {_mask} splits={num_kv_splits}"
+        else:
+            tag = f"B={B} Sq={Sq} Skv={Skv} H={H} Hkv={_hkv} D={D} {_mask} splits={num_kv_splits}"
+        if use_block_table:
+            tag += f" BT page{page_size} {kv_cache_layout}"
         rm = compute_md5(o_flat)
         rm2 = compute_md5(ref_flat)
         print(f"  [{tag}] result_md5 = {rm}")
@@ -1158,6 +1149,7 @@ def run_aiter_bench(
     backend="ck",
     num_kv_heads=None,
     precomputed_ref=None,
+    precomputed_inputs=None,
     seqlen_kv=None,
     varlen_seqlens_q=None,
     varlen_seqlens_kv=None,
@@ -1171,16 +1163,46 @@ def run_aiter_bench(
     varlen = varlen_seqlens_q is not None
     if backend == "asm" and dtype != torch.bfloat16:
         return {"skip": True}
+    if backend == "asm" and head_dim != 128:
+        return {"skip": True}
     if backend == "asm" and (varlen or (seqlen_kv is not None and seqlen_kv != seq_len)):
         return {"skip": True}
 
     results = {}
-    setup_seed(seed)
     torch.cuda.empty_cache()
 
     H, D = nheads, head_dim
     H_KV = num_kv_heads if num_kv_heads is not None else H
-    if varlen:
+    if precomputed_inputs is not None:
+        varlen = precomputed_inputs["varlen"]
+        B = precomputed_inputs["B"]
+        S = precomputed_inputs["Sq"]
+        Skv = precomputed_inputs["Skv"]
+        cu_q_t = precomputed_inputs["cu_q_t"]
+        cu_kv_t = precomputed_inputs["cu_kv_t"]
+        q = precomputed_inputs["q_t"]
+        k = precomputed_inputs["k_t"]
+        v = precomputed_inputs["v_t"]
+        if varlen:
+            vl_q = precomputed_inputs["vl_q"]
+            vl_kv = precomputed_inputs["vl_kv"]
+            cuq = precomputed_inputs["cuq"]
+            cukv = precomputed_inputs["cukv"]
+            total_q = precomputed_inputs["total_q"]
+            total_kv = precomputed_inputs["total_kv"]
+            q_pack, k_pack, v_pack = q, k, v
+            S = max(vl_q)
+            Skv = max(vl_kv)
+            q = torch.zeros(B, S, H, D, dtype=dtype, device="cuda")
+            k = torch.zeros(B, Skv, H_KV, D, dtype=dtype, device="cuda")
+            v = torch.zeros(B, Skv, H_KV, D, dtype=dtype, device="cuda")
+            for b in range(B):
+                q[b, : vl_q[b]] = q_pack[cuq[b] : cuq[b + 1]]
+                k[b, : vl_kv[b]] = k_pack[cukv[b] : cukv[b + 1]]
+                v[b, : vl_kv[b]] = v_pack[cukv[b] : cukv[b + 1]]
+    else:
+        setup_seed(seed)
+    if precomputed_inputs is None and varlen:
         vl_q = list(varlen_seqlens_q)
         vl_kv = list(varlen_seqlens_kv) if varlen_seqlens_kv is not None else vl_q
         B = len(vl_q)
@@ -1203,7 +1225,7 @@ def run_aiter_bench(
             q[b, : vl_q[b]] = q_pack[cuq[b] : cuq[b + 1]]
             k[b, : vl_kv[b]] = k_pack[cukv[b] : cukv[b + 1]]
             v[b, : vl_kv[b]] = v_pack[cukv[b] : cukv[b + 1]]
-    else:
+    elif precomputed_inputs is None:
         B, S, Skv = batch, seq_len, seqlen_kv if seqlen_kv is not None else seq_len
         cu_q_t = cu_kv_t = None
         q = torch.empty(B, S, H, D, dtype=dtype, device="cuda").uniform_(*UNIFORM_RANGE)
@@ -2008,7 +2030,7 @@ def _write_normal_csv(csv_path, data_rows, avg_rows):
             )
 
 
-def _write_varlen_cmp_csv(csv_path, data_rows):
+def _write_varlen_cmp_csv(csv_path, data_rows, avg_rows=None):
     """Write compare-mode varlen / cross-length results to CSV."""
     header = [
         "Sq",
@@ -2061,9 +2083,34 @@ def _write_varlen_cmp_csv(csv_path, data_rows):
                     fck[1],
                 ]
             )
+        for label, fly_r, ck_r, fly_ck_cmp in avg_rows or []:
+            w.writerow(
+                [
+                    label,
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    _csv_val(fly_r, "us"),
+                    _csv_val(fly_r, "tflops"),
+                    _csv_val(fly_r, "max_err"),
+                    _csv_val(fly_r, "min_cos"),
+                    "--",
+                    _csv_val(ck_r, "us"),
+                    _csv_val(ck_r, "tflops"),
+                    _csv_val(ck_r, "max_err"),
+                    _csv_val(ck_r, "min_cos"),
+                    "--",
+                    _csv_cmp_values(fly_ck_cmp)[0],
+                    _csv_cmp_values(fly_ck_cmp)[1],
+                ]
+            )
 
 
-def _write_varlen_normal_csv(csv_path, data_rows):
+def _write_varlen_normal_csv(csv_path, data_rows, avg_rows=None):
     """Write normal-mode varlen / cross-length results to CSV."""
     header = [
         "Sq",
@@ -2095,6 +2142,24 @@ def _write_varlen_normal_csv(csv_path, data_rows):
                     causal_tag,
                     path,
                     status,
+                    _csv_val(r, "max_err"),
+                    _csv_val(r, "min_cos"),
+                    _csv_val(r, "us"),
+                    _csv_val(r, "tflops"),
+                ]
+            )
+        for label, r in avg_rows or []:
+            w.writerow(
+                [
+                    label,
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "",
+                    "--",
                     _csv_val(r, "max_err"),
                     _csv_val(r, "min_cos"),
                     _csv_val(r, "us"),
@@ -2269,7 +2334,7 @@ def main():
         type=int,
         default=1,
         help="Split-K factor for the gfx950 DUALWAVE_SWP kernel. >1 runs the split-K "
-        "path (+combine kernel) via run_splitk_config; D=128 bf16/f16, seq_len >= 384.",
+        "path (+combine kernel) via run_splitk_config; D=64/128 bf16/f16, seq_len >= 384.",
     )
     causal_group = parser.add_mutually_exclusive_group()
     causal_group.add_argument("--causal", action="store_true", dest="causal")
@@ -2299,6 +2364,11 @@ def main():
         "--extra",
         action="store_true",
         help="Run additional varlen/cross-length configs from EXTRA_CONFIGS",
+    )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print per-config result_md5 / ref_md5 and bit-identical check (also enabled in --compare mode)",
     )
     parser.add_argument(
         "--block-table",
@@ -2391,6 +2461,8 @@ def main():
     dtypes_to_test = [args.dtype] if args.dtype else ["bf16", "fp16"]
     causals_to_test = [args.causal] if args.causal is not None else [True, False]
 
+    head_dims_to_test = [args.head_dim] if args.head_dim is not None else [64, 128]
+
     if args.batch or args.seq_len or args.num_heads or args.head_dim or args.num_kv_heads:
         nh_single = args.num_heads or 8
         configs = [
@@ -2399,7 +2471,6 @@ def main():
                 args.seq_len or 128,
                 nh_single,
                 args.num_kv_heads if args.num_kv_heads is not None else nh_single,
-                args.head_dim or 128,
                 args.num_kv_splits,
             )
         ]
@@ -2411,6 +2482,12 @@ def main():
     extra_cases = (
         [_extra_case_from_config(row) for row in EXTRA_CONFIGS] if args.extra and configs is DEFAULT_CONFIGS else []
     )
+    run_configs = [
+        (batch, seq_len, nh, nh_kv_default, hd, cfg_kv_splits)
+        for batch, seq_len, nh, nh_kv_default, cfg_kv_splits in configs
+        for hd in head_dims_to_test
+    ]
+    extra_run_cases = [(case, hd) for case in extra_cases for hd in head_dims_to_test]
     paged_kv_paths = [(None, "")]
     if args.block_table:
         paged_kv_paths = [
@@ -2426,7 +2503,7 @@ def main():
         if args.num_kv_splits > 1:
             print(
                 f"  FlyDSL column: split-K path (num_kv_splits={args.num_kv_splits}); "
-                f"D!=128 / non-bf16,f16 / seq_len<384 / ws>4GiB configs SKIP"
+                f"D not in {{64,128}} / non-bf16,f16 / seq_len<384 / ws>4GiB configs SKIP"
             )
         print(f"  FlyDSL opts: {FLASH_ATTN_FUNC_KERNEL_CONFIG}")
         if "fp8" in dtypes_to_test:
@@ -2444,7 +2521,7 @@ def main():
         for dtype_key in dtypes_to_test:
             dtype, dtype_str = dtype_map[dtype_key]
             for causal in causals_to_test:
-                for batch, seq_len, nh, nh_kv_default, hd, cfg_kv_splits in configs:
+                for batch, seq_len, nh, nh_kv_default, hd, cfg_kv_splits in run_configs:
                     causal_tag = "causal" if causal else "nocausal"
                     # CLI --num_kv_heads / --num_kv_splits (if set) override the per-config default.
                     nh_kv = args.num_kv_heads if args.num_kv_heads is not None else nh_kv_default
@@ -2489,6 +2566,24 @@ def main():
                             # Compute reference once for bf16/fp16 rows (fp8 helper owns quantization + reference).
                             if dtype_str == "fp8":
                                 pass
+                            elif args.trigger_lazy_else:
+                                precomputed_inputs, shared_ref = _build_inputs_and_reference_for_config(
+                                    batch=batch,
+                                    seqlen_q=seq_len,
+                                    seqlen_kv=None,
+                                    varlen_seqlens_q=None,
+                                    varlen_seqlens_kv=None,
+                                    num_heads=nh,
+                                    head_dim=hd,
+                                    num_kv_heads=nh_kv,
+                                    dtype=dtype,
+                                    causal=causal,
+                                    seed=args.seed,
+                                    use_block_table=False,
+                                    page_size=args.page_size,
+                                    kv_cache_layout=kv_cache_layout or "linear",
+                                    trigger_lazy_else=True,
+                                )
                             else:
                                 # All three use the same seed -> same Q/K/V -> identical reference.
                                 setup_seed(args.seed)
@@ -2537,6 +2632,7 @@ def main():
                                     num_kv_splits=kv_splits,
                                     seed=args.seed,
                                     dtype_str=dtype_str,
+                                    verbose=args.verbose,
                                     trigger_lazy_else=args.trigger_lazy_else,
                                     compare_mode=True,
                                     precomputed_ref=shared_ref,
@@ -2600,6 +2696,7 @@ def main():
                                 backend="ck",
                                 num_kv_heads=nh_kv,
                                 precomputed_ref=shared_ref,
+                                precomputed_inputs=precomputed_inputs,
                             )
                             asm_r = run_aiter_bench(
                                 batch,
@@ -2614,6 +2711,7 @@ def main():
                                 backend="asm",
                                 num_kv_heads=nh_kv,
                                 precomputed_ref=shared_ref,
+                                precomputed_inputs=precomputed_inputs,
                             )
                         rows.append((cfg, fly_r, ck_r, asm_r))
 
@@ -2685,10 +2783,9 @@ def main():
                 dtype, dtype_str = dtype_map[dtype_key]
                 for causal in causals_to_test:
                     ctag = "causal" if causal else "nocausal"
-                    for case in extra_cases:
+                    for case, hd in extra_run_cases:
                         nh = case["nh"]
                         nh_kv_eff = args.num_kv_heads if args.num_kv_heads is not None else case["nh_kv"]
-                        hd = case["hd"]
                         kv_splits = case.get("kv_splits", 1)
                         kwargs = dict(case["kwargs"])
                         for kv_cache_layout, path in paged_kv_paths:
@@ -2749,6 +2846,7 @@ def main():
                                     num_kv_splits=kv_splits,
                                     seed=args.seed,
                                     dtype_str=dtype_str,
+                                    verbose=args.verbose,
                                     compare_mode=True,
                                     precomputed_ref=shared_ref,
                                     precomputed_inputs=precomputed_inputs,
@@ -2813,16 +2911,19 @@ def main():
                 print(_fmt_extra_cmp_row(sq, skv, nh, nh_kv_eff, hd, dtype_key, ctag, path, fly_r, ck_r))
             print("  " + "-" * (len(xhdr2) - 2))
 
+            varlen_cmp_avg_rows = []
+
             def _extra_cmp_avg(label, subset):
                 fly_avg = _avg_results([row[8] for row in subset])
                 ck_avg = _avg_results([row[9] for row in subset])
                 fly_ck_cmp = _avg_cmp_values(subset, 8, 9)
                 print(_fmt_extra_cmp_avg_row(label, fly_avg, ck_avg, fly_ck_cmp))
+                varlen_cmp_avg_rows.append((label, fly_avg, ck_avg, fly_ck_cmp))
 
             _print_grouped_avgs(varlen_cmp_rows, lambda r: (r[5], r[6]), _extra_cmp_avg)
             print("=" * len(xhdr2))
             varlen_csv_path = f"fmha_varlen_perf_compare_{_gpu_short_name()}.csv"
-            _write_varlen_cmp_csv(varlen_csv_path, varlen_cmp_rows)
+            _write_varlen_cmp_csv(varlen_csv_path, varlen_cmp_rows, varlen_cmp_avg_rows)
             print(f"Varlen results saved to: {varlen_csv_path}")
 
     else:
@@ -2850,7 +2951,7 @@ def main():
         for dtype_key in dtypes_to_test:
             dtype, dtype_str = dtype_map[dtype_key]
             for causal in causals_to_test:
-                for batch, seq_len, nh, nh_kv_default, hd, cfg_kv_splits in configs:
+                for batch, seq_len, nh, nh_kv_default, hd, cfg_kv_splits in run_configs:
                     causal_tag = "causal" if causal else "nocausal"
                     # CLI --num_kv_heads / --num_kv_splits (if set) override the per-config default.
                     nh_kv = args.num_kv_heads if args.num_kv_heads is not None else nh_kv_default
@@ -2983,10 +3084,9 @@ def main():
                 dtype, dtype_str = dtype_map[dtype_key]
                 for causal in causals_to_test:
                     ctag = "causal" if causal else "nocausal"
-                    for case in extra_cases:
+                    for case, hd in extra_run_cases:
                         nh = case["nh"]
                         nh_kv_eff = args.num_kv_heads if args.num_kv_heads is not None else case["nh_kv"]
-                        hd = case["hd"]
                         kv_splits = case.get("kv_splits", 1)
                         kwargs = dict(case["kwargs"])
                         for kv_cache_layout, path in paged_kv_paths:
@@ -3159,6 +3259,8 @@ def main():
                 print(_fmt_extra_normal_row(sq, skv, nh, nh_kv_eff, hd, dtype_key, ctag, status, r, path=path))
             print("  " + "-" * (len(xhdr) - 2))
 
+            varlen_avg_rows = []
+
             def _extra_normal_avg(label, subset):
                 avg = _avg_results(
                     [row[9] for row in subset],
@@ -3167,11 +3269,12 @@ def main():
                 avg_row = _fmt_extra_normal_avg_row(label, avg)
                 if avg_row is not None:
                     print(avg_row)
+                    varlen_avg_rows.append((label, avg))
 
             _print_grouped_avgs(varlen_rows, lambda r: (r[5], r[6]), _extra_normal_avg)
             print("=" * len(xhdr))
             varlen_csv_path = f"fmha_varlen_perf_{_gpu_short_name()}.csv"
-            _write_varlen_normal_csv(varlen_csv_path, varlen_rows)
+            _write_varlen_normal_csv(varlen_csv_path, varlen_rows, varlen_avg_rows)
             print(f"Varlen results saved to: {varlen_csv_path}")
 
         if all_passed and extra_ok:

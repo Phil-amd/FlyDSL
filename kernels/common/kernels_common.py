@@ -11,14 +11,15 @@ from contextlib import contextmanager
 
 import flydsl.expr as fx
 from flydsl._mlir import ir
-from flydsl._mlir.dialects import arith as _std_arith
 from flydsl._mlir.dialects import builtin
 from flydsl._mlir.dialects import gpu as _gpu
-from flydsl._mlir.dialects import llvm as _llvm
 from flydsl._mlir.dialects import scf as _scf
-from flydsl.expr import buffer_ops
-from flydsl.expr.typing import T
 from flydsl.runtime.device import get_rocm_arch, is_rdna_arch
+
+# Memory/atomic primitives now live in mem_ops; re-exported here for back-compat.
+from kernels.common.mem_ops import _create_llvm_ptr
+from kernels.common.mem_ops import atomic_add as atomic_add
+from kernels.common.mem_ops import get_llvm_ptr as get_llvm_ptr
 
 
 @contextmanager
@@ -92,15 +93,6 @@ def get_warp_size(arch=None):
     if arch is None:
         arch = get_rocm_arch()
     return 32 if is_rdna_arch(arch) else 64
-
-
-def _create_llvm_ptr(value, address_space: int = 1):
-    value = buffer_ops._unwrap_value(value)
-    if isinstance(value.type, ir.IndexType):
-        i64_type = T.i64
-        value = buffer_ops._unwrap_value(_std_arith.IndexCastOp(i64_type, value).result)
-    ptr_type = ir.Type.parse(f"!llvm.ptr<{address_space}>")
-    return _llvm.IntToPtrOp(ptr_type, value).result
 
 
 def stream_ptr_to_async_token(stream_ptr_value, loc=None, ip=None):
