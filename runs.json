@@ -1,8 +1,51 @@
 {
  "schema": 1,
- "updated": "2026-07-22T21:47:55Z",
+ "updated": "2026-07-23T09:31:44Z",
  "repo": "Phil-amd/FlyDSL",
  "runs": [
+  {
+   "run_id": 29994516007,
+   "pr": 889,
+   "commit": "98abfae21453698c9dd5fc0282b38bb03453e55a",
+   "branch": "ci/comment-only-smoke-test",
+   "event": "pull_request",
+   "title": "Test CI with comment-only change",
+   "status": "queued",
+   "conclusion": null,
+   "url": "https://github.com/Phil-amd/FlyDSL/actions/runs/29994516007",
+   "created_at": "2026-07-23T09:15:08Z",
+   "updated_at": "2026-07-23T09:16:21Z",
+   "actor": "Phil-amd",
+   "jobs": [
+    {
+     "runner": "linux-flydsl-mi325-1",
+     "arch": "gfx942",
+     "status": "queued",
+     "conclusion": null,
+     "started_at": "2026-07-23T09:16:21Z",
+     "completed_at": null,
+     "url": "https://github.com/Phil-amd/FlyDSL/actions/runs/29994516007/job/89165175678"
+    },
+    {
+     "runner": "linux-flydsl-navi-2",
+     "arch": "gfx1201",
+     "status": "queued",
+     "conclusion": null,
+     "started_at": "2026-07-23T09:16:21Z",
+     "completed_at": null,
+     "url": "https://github.com/Phil-amd/FlyDSL/actions/runs/29994516007/job/89165175707"
+    },
+    {
+     "runner": "linux-flydsl-mi355-1",
+     "arch": "gfx950",
+     "status": "queued",
+     "conclusion": null,
+     "started_at": "2026-07-23T09:16:21Z",
+     "completed_at": null,
+     "url": "https://github.com/Phil-amd/FlyDSL/actions/runs/29994516007/job/89165175751"
+    }
+   ]
+  },
   {
    "run_id": 28855027240,
    "pr": null,
