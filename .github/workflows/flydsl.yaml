@@ -22,6 +22,7 @@ concurrency:
 env:
   DOCKER_IMAGE: "rocm/pytorch:rocm7.2_ubuntu24.04_py3.12_pytorch_release_2.9.1"
   # Bump when the container or LLVM build environment changes incompatibly.
+  # Workflow-only changes do not invalidate the shared MLIR cache.
   MLIR_CACHE_VERSION: "rocm7.2-ubuntu24.04-py3.12-v1"
   GITHUB_REPO_NAME: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
   GITHUB_COMMIT_SHA: ${{ github.event.pull_request.head.sha || github.event.head_commit.id || github.sha }}
