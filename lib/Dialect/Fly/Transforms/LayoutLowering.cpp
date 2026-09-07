@@ -43,6 +43,9 @@ namespace fly {
 
 namespace {
 
+/// Depth limit for the narrow-value proof walk; layout index chains are short.
+constexpr unsigned kMaxNarrowProofDepth = 16;
+
 Value castPrintfArg(PatternRewriter &rewriter, Location loc, Value value, std::string &format) {
   Type type = value.getType();
   if (isa<IndexType>(type)) {
@@ -2905,6 +2908,52 @@ public:
 /// moves the static offset strictly outward (swap), and the resulting
 /// `dyn -> static` form is rejected by the already-canonical check, so the
 /// pattern cannot loop.
+/// Can \p v be proven to fit in 32 bits?
+///
+/// The fold below is only sound when the value survives a trip through i32, and
+/// the type system cannot say that: an `index` is 64-bit.  Walk the definition
+/// chain instead and accept only values built from bounded roots -- GPU launch
+/// coordinates and constants -- through arithmetic that cannot escape their
+/// range by more than a few bits.  Anything else (a kernel argument, a load, an
+/// op not on the list) is rejected, which is the conservative answer.
+///
+/// This is the value-range knowledge upstream deliberately does not assume, and
+/// the only reason FlyDSL may re-fold what `arith` no longer does.
+static bool isProvablyNarrow(Value v, unsigned depth, llvm::SmallPtrSetImpl<Operation *> &visited) {
+  // Guard against deep or cyclic chains (block arguments in loops).
+  if (depth > kMaxNarrowProofDepth)
+    return false;
+
+  Operation *def = v.getDefiningOp();
+  if (!def)
+    return false; // block/function argument: unknown range
+
+  // Already on the current walk -- treat as proven so a cycle does not recurse
+  // forever; any genuinely unbounded feeder on the cycle fails on its own edge.
+  if (!visited.insert(def).second)
+    return true;
+
+  // Bounded roots.
+  if (isa<gpu::ThreadIdOp, gpu::BlockIdOp, gpu::BlockDimOp, gpu::GridDimOp, gpu::LaneIdOp>(def))
+    return true;
+  if (matchPattern(v, m_Constant()))
+    return true;
+
+  // Arithmetic that keeps a narrow operand narrow.  Division and remainder only
+  // shrink; add/sub/mul/shift can grow, but not past 32 bits when every operand
+  // is a launch coordinate or a small constant, which is what the recursion
+  // enforces.
+  if (!isa<arith::AddIOp, arith::SubIOp, arith::MulIOp, arith::AndIOp, arith::OrIOp,
+           arith::XOrIOp, arith::ShLIOp, arith::ShRUIOp, arith::ShRSIOp, arith::DivUIOp,
+           arith::DivSIOp, arith::RemUIOp, arith::RemSIOp, arith::SelectOp, arith::MinUIOp,
+           arith::MaxUIOp, arith::MinSIOp, arith::MaxSIOp, arith::IndexCastOp>(def))
+    return false;
+
+  return llvm::all_of(def->getOperands(), [&](Value operand) {
+    return isProvablyNarrow(operand, depth + 1, visited);
+  });
+}
+
 /// Fold `index_cast(index_cast(x : index -> iN) : iN -> index)` back to `x`.
 ///
 /// Upstream MLIR used to fold this in `arith`'s canonicalizer, but the pattern
@@ -2951,6 +3000,13 @@ public:
     // genuinely lossy and is left alone.
     auto midTy = dyn_cast<IntegerType>(inner.getType());
     if (!midTy || midTy.getWidth() < 32)
+      return failure();
+
+    // Type width alone does not make the round trip lossless: an `index` is
+    // 64-bit, so a value above 2^31 would not survive it.  Only fold when the
+    // value is provably narrow.
+    llvm::SmallPtrSet<Operation *, 16> visited;
+    if (!isProvablyNarrow(orig, 0, visited))
       return failure();
 
     rewriter.replaceOp(op, orig);
