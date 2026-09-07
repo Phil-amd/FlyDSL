@@ -2946,7 +2946,8 @@ static bool isProvablyNarrow(Value v, unsigned depth, llvm::SmallPtrSetImpl<Oper
   if (!isa<arith::AddIOp, arith::SubIOp, arith::MulIOp, arith::AndIOp, arith::OrIOp,
            arith::XOrIOp, arith::ShLIOp, arith::ShRUIOp, arith::ShRSIOp, arith::DivUIOp,
            arith::DivSIOp, arith::RemUIOp, arith::RemSIOp, arith::SelectOp, arith::MinUIOp,
-           arith::MaxUIOp, arith::MinSIOp, arith::MaxSIOp, arith::IndexCastOp>(def))
+           arith::MaxUIOp, arith::MinSIOp, arith::MaxSIOp, arith::IndexCastOp,
+           arith::IndexCastUIOp>(def))
     return false;
 
   return llvm::all_of(def->getOperands(), [&](Value operand) {
@@ -2954,7 +2955,8 @@ static bool isProvablyNarrow(Value v, unsigned depth, llvm::SmallPtrSetImpl<Oper
   });
 }
 
-/// Fold `index_cast(index_cast(x : index -> iN) : iN -> index)` back to `x`.
+/// Fold `cast(cast(x : index -> iN) : iN -> index)` back to `x`, for both the
+/// signed (`arith.index_cast`) and unsigned (`arith.index_castui`) forms.
 ///
 /// Upstream MLIR used to fold this in `arith`'s canonicalizer, but the pattern
 /// was unsound in general and was removed in llvm/llvm-project@8c81064169c5: for
@@ -2965,40 +2967,43 @@ static bool isProvablyNarrow(Value v, unsigned depth, llvm::SmallPtrSetImpl<Oper
 /// not.
 ///
 /// FlyDSL emits exactly that shape when layout arithmetic crosses between
-/// `index` and i32, and it has the value-range knowledge upstream deliberately
-/// does not assume: these are tile/lane coordinates bounded by launch geometry,
-/// orders of magnitude below 2^31.  Re-folding them here removes 46 redundant
-/// cast pairs from a MoE stage1 kernel, which after lowering would otherwise
-/// become `trunc`/`sext` pairs inside the MFMA loop and cost 128 extra VGPR
-/// spills (measured: vgpr_spill_count 147 -> 19).
+/// `index` and i32, and `isProvablyNarrow` supplies the value-range knowledge
+/// upstream deliberately does not assume.  Re-folding removes 42 redundant cast
+/// pairs from a MoE stage1 kernel, which after lowering would otherwise become
+/// `trunc`/`sext` pairs inside the MFMA loop (measured: vgpr_spill_count
+/// 147 -> 19).
 ///
-/// The i32 lower bound is deliberate: widening this to arbitrary iN would
-/// re-introduce the unsoundness upstream fixed.
+/// Both casts must be the same op: mixing signed and unsigned changes the
+/// meaning of the round trip, and the template parameter enforces that.
+/// Scalars and vectors are both handled -- for a vector the element types carry
+/// the index/integer distinction, and requiring the outer result type to equal
+/// the innermost source type keeps the shapes in step.
 ///
 /// Convergence: each rewrite replaces one op with an existing value and adds
 /// nothing, so the pattern cannot loop.
-class RedundantIndexCastPair : public OpRewritePattern<arith::IndexCastOp> {
+template <typename CastOp>
+class RedundantIndexCastPairImpl : public OpRewritePattern<CastOp> {
 public:
-  using OpRewritePattern<arith::IndexCastOp>::OpRewritePattern;
+  using OpRewritePattern<CastOp>::OpRewritePattern;
 
-  LogicalResult matchAndRewrite(arith::IndexCastOp op, PatternRewriter &rewriter) const override {
-    // Outer cast must land back on `index`.
-    if (!isa<IndexType>(op.getType()))
+  LogicalResult matchAndRewrite(CastOp op, PatternRewriter &rewriter) const override {
+    // Outer cast must land back on `index` (element type, so vectors work too).
+    if (!isa<IndexType>(getElementTypeOrSelf(op.getType())))
       return failure();
 
-    auto inner = op.getIn().getDefiningOp<arith::IndexCastOp>();
+    auto inner = op.getIn().template getDefiningOp<CastOp>();
     if (!inner)
       return failure();
 
-    // Innermost source must be the `index` we are returning to.
+    // Innermost source must be exactly what we are returning to; for vectors
+    // this also pins the shape.
     Value orig = inner.getIn();
-    if (!isa<IndexType>(orig.getType()))
+    if (orig.getType() != op.getType())
       return failure();
 
-    // The intermediate must be wide enough to hold the value.  32 bits covers
-    // every coordinate FlyDSL routes through this path; anything narrower is
-    // genuinely lossy and is left alone.
-    auto midTy = dyn_cast<IntegerType>(inner.getType());
+    // The intermediate must be wide enough to hold the value.  Anything
+    // narrower than 32 bits is genuinely lossy and is left alone.
+    auto midTy = dyn_cast<IntegerType>(getElementTypeOrSelf(inner.getType()));
     if (!midTy || midTy.getWidth() < 32)
       return failure();
 
@@ -3013,6 +3018,9 @@ public:
     return success();
   }
 };
+
+using RedundantIndexCastPair = RedundantIndexCastPairImpl<arith::IndexCastOp>;
+using RedundantIndexCastUIPair = RedundantIndexCastPairImpl<arith::IndexCastUIOp>;
 
 class AddOffsetCanonicalization : public OpRewritePattern<AddOffsetOp> {
 public:
@@ -3167,7 +3175,7 @@ public:
     patterns.add<MemRefLoadVecOpLowering, MemRefStoreVecOpLowering>(context);
     patterns.add<MemRefAllocaOpLowering>(context);
     patterns.add<AddOffsetCanonicalization>(context);
-    patterns.add<RedundantIndexCastPair>(context);
+    patterns.add<RedundantIndexCastPair, RedundantIndexCastUIPair>(context);
 
     // Utility ops
     patterns.add<PrintOpLowering>(context);

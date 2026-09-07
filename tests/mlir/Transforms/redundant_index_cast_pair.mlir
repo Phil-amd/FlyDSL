@@ -88,3 +88,51 @@ func.func @keep_i16() -> index {
   %1 = arith.index_cast %0 : i16 to index
   return %1 : index
 }
+
+// The unsigned variant is folded on the same terms.
+
+// CHECK-LABEL: func.func @fold_unsigned
+// CHECK-NOT:     arith.index_castui
+// CHECK:         return
+func.func @fold_unsigned() -> index {
+  %tid = gpu.thread_id x
+  %0 = arith.index_castui %tid : index to i32
+  %1 = arith.index_castui %0 : i32 to index
+  return %1 : index
+}
+
+// Vectors are handled through their element types.
+
+// CHECK-LABEL: func.func @fold_vector
+// CHECK-NOT:     arith.index_cast
+// CHECK:         return
+func.func @fold_vector() -> vector<4xindex> {
+  %v = arith.constant dense<[1, 2, 3, 4]> : vector<4xindex>
+  %0 = arith.index_cast %v : vector<4xindex> to vector<4xi32>
+  %1 = arith.index_cast %0 : vector<4xi32> to vector<4xindex>
+  return %1 : vector<4xindex>
+}
+
+// Mixing the signed and unsigned casts changes the meaning of the round trip,
+// so the pair must not be folded.
+
+// CHECK-LABEL: func.func @keep_mixed_signedness
+// CHECK:         arith.index_castui
+// CHECK:         arith.index_cast
+func.func @keep_mixed_signedness() -> index {
+  %tid = gpu.thread_id x
+  %0 = arith.index_castui %tid : index to i32
+  %1 = arith.index_cast %0 : i32 to index
+  return %1 : index
+}
+
+// The unsigned variant is subject to the same range requirement.
+
+// CHECK-LABEL: func.func @keep_unsigned_unknown
+// CHECK:         arith.index_castui %arg0
+// CHECK:         arith.index_castui
+func.func @keep_unsigned_unknown(%a: index) -> index {
+  %0 = arith.index_castui %a : index to i32
+  %1 = arith.index_castui %0 : i32 to index
+  return %1 : index
+}
