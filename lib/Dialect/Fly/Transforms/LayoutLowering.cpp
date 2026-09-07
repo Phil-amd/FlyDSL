@@ -2905,6 +2905,59 @@ public:
 /// moves the static offset strictly outward (swap), and the resulting
 /// `dyn -> static` form is rejected by the already-canonical check, so the
 /// pattern cannot loop.
+/// Fold `index_cast(index_cast(x : index -> iN) : iN -> index)` back to `x`.
+///
+/// Upstream MLIR used to fold this in `arith`'s canonicalizer, but the pattern
+/// was unsound in general and was removed in llvm/llvm-project@8c81064169c5: for
+/// a narrow intermediate such as i8 the inner cast truncates, so the round trip
+/// loses bits and must be preserved.  The check upstream now applies is purely
+/// type-based -- an `index` is assumed to occupy its full 64-bit internal
+/// storage -- so `index -> i32 -> index` is rejected as lossy even where it is
+/// not.
+///
+/// FlyDSL emits exactly that shape when layout arithmetic crosses between
+/// `index` and i32, and it has the value-range knowledge upstream deliberately
+/// does not assume: these are tile/lane coordinates bounded by launch geometry,
+/// orders of magnitude below 2^31.  Re-folding them here removes 46 redundant
+/// cast pairs from a MoE stage1 kernel, which after lowering would otherwise
+/// become `trunc`/`sext` pairs inside the MFMA loop and cost 128 extra VGPR
+/// spills (measured: vgpr_spill_count 147 -> 19).
+///
+/// The i32 lower bound is deliberate: widening this to arbitrary iN would
+/// re-introduce the unsoundness upstream fixed.
+///
+/// Convergence: each rewrite replaces one op with an existing value and adds
+/// nothing, so the pattern cannot loop.
+class RedundantIndexCastPair : public OpRewritePattern<arith::IndexCastOp> {
+public:
+  using OpRewritePattern<arith::IndexCastOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(arith::IndexCastOp op, PatternRewriter &rewriter) const override {
+    // Outer cast must land back on `index`.
+    if (!isa<IndexType>(op.getType()))
+      return failure();
+
+    auto inner = op.getIn().getDefiningOp<arith::IndexCastOp>();
+    if (!inner)
+      return failure();
+
+    // Innermost source must be the `index` we are returning to.
+    Value orig = inner.getIn();
+    if (!isa<IndexType>(orig.getType()))
+      return failure();
+
+    // The intermediate must be wide enough to hold the value.  32 bits covers
+    // every coordinate FlyDSL routes through this path; anything narrower is
+    // genuinely lossy and is left alone.
+    auto midTy = dyn_cast<IntegerType>(inner.getType());
+    if (!midTy || midTy.getWidth() < 32)
+      return failure();
+
+    rewriter.replaceOp(op, orig);
+    return success();
+  }
+};
+
 class AddOffsetCanonicalization : public OpRewritePattern<AddOffsetOp> {
 public:
   using OpRewritePattern<AddOffsetOp>::OpRewritePattern;
@@ -3058,6 +3111,7 @@ public:
     patterns.add<MemRefLoadVecOpLowering, MemRefStoreVecOpLowering>(context);
     patterns.add<MemRefAllocaOpLowering>(context);
     patterns.add<AddOffsetCanonicalization>(context);
+    patterns.add<RedundantIndexCastPair>(context);
 
     // Utility ops
     patterns.add<PrintOpLowering>(context);
