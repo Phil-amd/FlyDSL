@@ -136,3 +136,59 @@ func.func @keep_unsigned_unknown(%a: index) -> index {
   %1 = arith.index_castui %0 : i32 to index
   return %1 : index
 }
+
+// Bounded roots are not enough on their own: arithmetic can carry a small value
+// out of i32 range, and then the round trip is lossy again.
+
+// CHECK-LABEL: func.func @keep_large_constant
+// CHECK:         arith.index_cast
+// CHECK:         arith.index_cast
+func.func @keep_large_constant() -> index {
+  %big = arith.constant 1099511627776 : index
+  %tid = gpu.thread_id x
+  %s = arith.addi %big, %tid : index
+  %0 = arith.index_cast %s : index to i32
+  %1 = arith.index_cast %0 : i32 to index
+  return %1 : index
+}
+
+// CHECK-LABEL: func.func @keep_mul_overflow
+// CHECK:         arith.index_cast
+// CHECK:         arith.index_cast
+func.func @keep_mul_overflow() -> index {
+  %t = gpu.thread_id x
+  %a = arith.muli %t, %t : index
+  %b = arith.muli %a, %t : index
+  %c = arith.muli %b, %t : index
+  %0 = arith.index_cast %c : index to i32
+  %1 = arith.index_cast %0 : i32 to index
+  return %1 : index
+}
+
+// CHECK-LABEL: func.func @keep_shift_overflow
+// CHECK:         arith.index_cast
+// CHECK:         arith.index_cast
+func.func @keep_shift_overflow() -> index {
+  %t = gpu.thread_id x
+  %c40 = arith.constant 40 : index
+  %s = arith.shli %t, %c40 : index
+  %0 = arith.index_cast %s : index to i32
+  %1 = arith.index_cast %0 : i32 to index
+  return %1 : index
+}
+
+// Shrinking operations keep a value in range, so these still fold.
+
+// CHECK-LABEL: func.func @fold_masked
+// CHECK-NOT:     arith.index_cast
+// CHECK:         return
+func.func @fold_masked() -> index {
+  %t = gpu.thread_id x
+  %c63 = arith.constant 63 : index
+  %big = arith.constant 1099511627776 : index
+  %m = arith.andi %big, %c63 : index
+  %s = arith.addi %m, %t : index
+  %0 = arith.index_cast %s : index to i32
+  %1 = arith.index_cast %0 : i32 to index
+  return %1 : index
+}
