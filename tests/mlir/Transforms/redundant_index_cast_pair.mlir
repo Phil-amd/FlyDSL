@@ -18,33 +18,43 @@ func.func @fold_from_thread_id() -> index {
 
 // A chain of workgroup-relative coordinates stays small and folds.
 
-// CHECK-LABEL: func.func @fold_arith_chain
+// CHECK-LABEL: gpu.func @fold_arith_chain
 // CHECK-NOT:     arith.index_cast
-// CHECK:         return
-func.func @fold_arith_chain() -> index {
-  %tid = gpu.thread_id x
-  %dim = gpu.block_dim x
-  %c4 = arith.constant 4 : index
-  %a = arith.muli %dim, %c4 : index
-  %b = arith.addi %a, %tid : index
-  %s = arith.shrui %b, %c4 : index
-  %0 = arith.index_cast %s : index to i32
-  %1 = arith.index_cast %0 : i32 to index
-  return %1 : index
+// CHECK:         gpu.return
+gpu.module @arith_chain {
+  gpu.func @fold_arith_chain(%out: memref<?xindex>) kernel
+      attributes {known_block_size = array<i32: 256, 1, 1>} {
+    %tid = gpu.thread_id x
+    %dim = gpu.block_dim x
+    %c4 = arith.constant 4 : index
+    %z = arith.constant 0 : index
+    %a = arith.muli %dim, %c4 : index
+    %b = arith.addi %a, %tid : index
+    %s = arith.shrui %b, %c4 : index
+    %0 = arith.index_cast %s : index to i32
+    %1 = arith.index_cast %0 : i32 to index
+    memref.store %1, %out[%z] : memref<?xindex>
+    gpu.return
+  }
 }
 
 // A grid-relative coordinate carries the grid limit (2^31-1), so scaling it
 // leaves i32 range and the pair must be kept.  A bare `block_id` still folds,
 // because the limit itself fits in a signed i32.
 
-// CHECK-LABEL: func.func @fold_bare_block_id
+// CHECK-LABEL: gpu.func @fold_bare_block_id
 // CHECK-NOT:     arith.index_cast
-// CHECK:         return
-func.func @fold_bare_block_id() -> index {
-  %bid = gpu.block_id x
-  %0 = arith.index_cast %bid : index to i32
-  %1 = arith.index_cast %0 : i32 to index
-  return %1 : index
+// CHECK:         gpu.return
+gpu.module @bare_block_id {
+  gpu.func @fold_bare_block_id(%out: memref<?xindex>) kernel
+      attributes {known_grid_size = array<i32: 1024, 1, 1>} {
+    %bid = gpu.block_id x
+    %z = arith.constant 0 : index
+    %0 = arith.index_cast %bid : index to i32
+    %1 = arith.index_cast %0 : i32 to index
+    memref.store %1, %out[%z] : memref<?xindex>
+    gpu.return
+  }
 }
 
 // CHECK-LABEL: func.func @keep_scaled_block_id
@@ -209,18 +219,23 @@ func.func @keep_shift_overflow() -> index {
 
 // Shrinking operations keep a value in range, so these still fold.
 
-// CHECK-LABEL: func.func @fold_masked
+// CHECK-LABEL: gpu.func @fold_masked
 // CHECK-NOT:     arith.index_cast
-// CHECK:         return
-func.func @fold_masked() -> index {
-  %t = gpu.thread_id x
-  %c63 = arith.constant 63 : index
-  %big = arith.constant 1099511627776 : index
-  %m = arith.andi %big, %c63 : index
-  %s = arith.addi %m, %t : index
-  %0 = arith.index_cast %s : index to i32
-  %1 = arith.index_cast %0 : i32 to index
-  return %1 : index
+// CHECK:         gpu.return
+gpu.module @masked {
+  gpu.func @fold_masked(%out: memref<?xindex>) kernel
+      attributes {known_block_size = array<i32: 256, 1, 1>} {
+    %t = gpu.thread_id x
+    %c63 = arith.constant 63 : index
+    %big = arith.constant 1099511627776 : index
+    %z = arith.constant 0 : index
+    %m = arith.andi %big, %c63 : index
+    %s = arith.addi %m, %t : index
+    %0 = arith.index_cast %s : index to i32
+    %1 = arith.index_cast %0 : i32 to index
+    memref.store %1, %out[%z] : memref<?xindex>
+    gpu.return
+  }
 }
 
 // A negative constant is not a narrow value: every bound rule reads its

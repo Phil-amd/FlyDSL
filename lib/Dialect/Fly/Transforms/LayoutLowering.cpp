@@ -14,6 +14,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/IR/Value.h"
 #include "mlir/Interfaces/FunctionInterfaces.h"
+#include "mlir/Interfaces/InferIntRangeInterface.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Support/LLVM.h"
 #include "mlir/Transforms/CSE.h"
@@ -21,7 +22,6 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/ScopeExit.h"
 #include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/MathExtras.h"
 
 #include <optional>
@@ -50,22 +50,6 @@ namespace {
 
 /// Depth limit for the narrow-value proof walk; layout index chains are short.
 constexpr unsigned kMaxNarrowProofDepth = 16;
-
-/// Fallback bounds on launch coordinates when no compile-time geometry is known.
-///
-/// These are only reached when the op carries no `upper_bound` and the enclosing
-/// kernel declares no launch geometry; `launchCoordinateBound` prefers either of
-/// those when present.  They are deliberately generous, because a bound that is
-/// too small is unsound rather than merely imprecise: it would let a value that
-/// really does exceed i32 be folded through an i32 round trip.
-///
-/// Workgroup-relative coordinates are bounded by the largest workgroup any
-/// supported target can launch.  HIP caps a workgroup at 1024 work items, so
-/// 2^16 leaves several doublings of headroom while staying far enough below
-/// 2^31 that ordinary scaling of a thread id still folds.  Grid-relative ones
-/// get the full HIP grid limit of 2^31-1.
-constexpr uint64_t kMaxWorkgroupCoordinate = 1u << 16;
-constexpr uint64_t kMaxGridCoordinate = (uint64_t(1) << 31) - 1;
 
 Value castPrintfArg(PatternRewriter &rewriter, Location loc, Value value, std::string &format) {
   Type type = value.getType();
@@ -2970,31 +2954,22 @@ static std::optional<uint64_t> narrowUpperBound(Value v, unsigned depth,
     return std::nullopt;
   auto pop = llvm::make_scope_exit([&] { visited.erase(def); });
 
-  // Launch coordinates are bounded by the launch geometry.  Workgroup-relative
-  // ones stay small; grid-relative ones can reach the grid limit.  An op that
-  // declares its own `upper_bound` is believed over either fallback: the
-  // attribute is a promise from the producer that exceeding it is undefined
-  // behaviour, and it is the only bound that stays correct if the launch
-  // configuration outgrows the constants above.
-  if (isa<gpu::ThreadIdOp, gpu::BlockDimOp, gpu::LaneIdOp, gpu::BlockIdOp, gpu::GridDimOp>(def)) {
-    if (auto declared = def->getAttrOfType<IntegerAttr>("upper_bound"))
-      return declared.getValue().getZExtValue();
-    bool isGrid = isa<gpu::BlockIdOp, gpu::GridDimOp>(def);
-    // The kernel's declared launch geometry is exact where it exists.  Upstream
-    // checks an enclosing gpu.launch, the gpu.func itself, then any
-    // `gpu.known_*_size` on the surrounding function.  `gpu.lane_id` names no
-    // axis, so it keeps the fallback.
-    std::optional<gpu::Dimension> dim =
-        llvm::TypeSwitch<Operation *, std::optional<gpu::Dimension>>(def)
-            .Case<gpu::ThreadIdOp, gpu::BlockDimOp, gpu::BlockIdOp, gpu::GridDimOp>(
-                [](auto indexOp) { return indexOp.getDimension(); })
-            .Default([](Operation *) { return std::nullopt; });
-    if (dim) {
-      auto kind = isGrid ? gpu::DimensionKind::Grid : gpu::DimensionKind::Block;
-      if (auto known = gpu::getKnownDimensionSizeAround(def, kind, *dim))
-        return *known;
+  // Launch coordinates: ask the op for its own range.  Every gpu index op
+  // implements InferIntRangeInterface, and that implementation already prefers
+  // an explicit `upper_bound` attribute, then the launch geometry declared by an
+  // enclosing gpu.launch / gpu.func / `gpu.known_*_size`, and only then its own
+  // implicit maximum (kMaxDim, i.e. uint32_t::max).  Deferring to it keeps this
+  // analysis in step with upstream instead of restating the ordering here.
+  if (auto inferrable = dyn_cast<InferIntRangeInterface>(def)) {
+    if (def->getNumOperands() == 0 && def->getNumResults() == 1) {
+      std::optional<uint64_t> inferred;
+      inferrable.inferResultRanges({}, [&](Value v, const ConstantIntRanges &range) {
+        if (v == def->getResult(0))
+          inferred = range.umax().getZExtValue();
+      });
+      if (inferred)
+        return inferred;
     }
-    return isGrid ? kMaxGridCoordinate : kMaxWorkgroupCoordinate;
   }
 
   auto operandBound = [&](unsigned i) {
