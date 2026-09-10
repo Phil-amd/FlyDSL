@@ -18,33 +18,43 @@ func.func @fold_from_thread_id() -> index {
 
 // A chain of workgroup-relative coordinates stays small and folds.
 
-// CHECK-LABEL: func.func @fold_arith_chain
+// CHECK-LABEL: gpu.func @fold_arith_chain
 // CHECK-NOT:     arith.index_cast
-// CHECK:         return
-func.func @fold_arith_chain() -> index {
-  %tid = gpu.thread_id x
-  %dim = gpu.block_dim x
-  %c4 = arith.constant 4 : index
-  %a = arith.muli %dim, %c4 : index
-  %b = arith.addi %a, %tid : index
-  %s = arith.shrui %b, %c4 : index
-  %0 = arith.index_cast %s : index to i32
-  %1 = arith.index_cast %0 : i32 to index
-  return %1 : index
+// CHECK:         gpu.return
+gpu.module @arith_chain {
+  gpu.func @fold_arith_chain(%out: memref<?xindex>) kernel
+      attributes {known_block_size = array<i32: 256, 1, 1>} {
+    %tid = gpu.thread_id x
+    %dim = gpu.block_dim x
+    %c4 = arith.constant 4 : index
+    %z = arith.constant 0 : index
+    %a = arith.muli %dim, %c4 : index
+    %b = arith.addi %a, %tid : index
+    %s = arith.shrui %b, %c4 : index
+    %0 = arith.index_cast %s : index to i32
+    %1 = arith.index_cast %0 : i32 to index
+    memref.store %1, %out[%z] : memref<?xindex>
+    gpu.return
+  }
 }
 
 // A grid-relative coordinate carries the grid limit (2^31-1), so scaling it
 // leaves i32 range and the pair must be kept.  A bare `block_id` still folds,
 // because the limit itself fits in a signed i32.
 
-// CHECK-LABEL: func.func @fold_bare_block_id
+// CHECK-LABEL: gpu.func @fold_bare_block_id
 // CHECK-NOT:     arith.index_cast
-// CHECK:         return
-func.func @fold_bare_block_id() -> index {
-  %bid = gpu.block_id x
-  %0 = arith.index_cast %bid : index to i32
-  %1 = arith.index_cast %0 : i32 to index
-  return %1 : index
+// CHECK:         gpu.return
+gpu.module @bare_block_id {
+  gpu.func @fold_bare_block_id(%out: memref<?xindex>) kernel
+      attributes {known_grid_size = array<i32: 1024, 1, 1>} {
+    %bid = gpu.block_id x
+    %z = arith.constant 0 : index
+    %0 = arith.index_cast %bid : index to i32
+    %1 = arith.index_cast %0 : i32 to index
+    memref.store %1, %out[%z] : memref<?xindex>
+    gpu.return
+  }
 }
 
 // CHECK-LABEL: func.func @keep_scaled_block_id
@@ -209,18 +219,23 @@ func.func @keep_shift_overflow() -> index {
 
 // Shrinking operations keep a value in range, so these still fold.
 
-// CHECK-LABEL: func.func @fold_masked
+// CHECK-LABEL: gpu.func @fold_masked
 // CHECK-NOT:     arith.index_cast
-// CHECK:         return
-func.func @fold_masked() -> index {
-  %t = gpu.thread_id x
-  %c63 = arith.constant 63 : index
-  %big = arith.constant 1099511627776 : index
-  %m = arith.andi %big, %c63 : index
-  %s = arith.addi %m, %t : index
-  %0 = arith.index_cast %s : index to i32
-  %1 = arith.index_cast %0 : i32 to index
-  return %1 : index
+// CHECK:         gpu.return
+gpu.module @masked {
+  gpu.func @fold_masked(%out: memref<?xindex>) kernel
+      attributes {known_block_size = array<i32: 256, 1, 1>} {
+    %t = gpu.thread_id x
+    %c63 = arith.constant 63 : index
+    %big = arith.constant 1099511627776 : index
+    %z = arith.constant 0 : index
+    %m = arith.andi %big, %c63 : index
+    %s = arith.addi %m, %t : index
+    %0 = arith.index_cast %s : index to i32
+    %1 = arith.index_cast %0 : i32 to index
+    memref.store %1, %out[%z] : memref<?xindex>
+    gpu.return
+  }
 }
 
 // A negative constant is not a narrow value: every bound rule reads its
@@ -350,4 +365,94 @@ gpu.module @m {
     memref.store %1, %out[%z] : memref<?xindex>
     gpu.return
   }
+}
+
+// Widening is as dangerous as narrowing for the signed cast: whatever the
+// narrow type already holds gets sign-extended, so a value that overflowed i8
+// between the two casts comes back as a huge unsigned one.  The bound has to be
+// checked against the narrower of the two types, not just the destination.
+
+// CHECK-LABEL: func.func @keep_widening_after_i8_overflow
+// CHECK:         arith.index_cast %{{.*}} : index to i32
+// CHECK:         arith.index_cast %{{.*}} : i32 to index
+func.func @keep_widening_after_i8_overflow() -> index {
+  %tid = gpu.thread_id x
+  %c127 = arith.constant 127 : index
+  %m = arith.andi %tid, %c127 : index
+  %b = arith.index_cast %m : index to i8
+  %c100 = arith.constant 100 : i8
+  %w = arith.addi %b, %c100 : i8
+  %x = arith.index_cast %w : i8 to index
+  %c1 = arith.constant 1 : index
+  %s = arith.shrui %x, %c1 : index
+  %0 = arith.index_cast %s : index to i32
+  %1 = arith.index_cast %0 : i32 to index
+  return %1 : index
+}
+
+// The same taint reaching divui, and the one-unknown-side rules: each of these
+// would take the bound from the tainted operand alone.
+
+// CHECK-LABEL: func.func @keep_divui_of_widened
+// CHECK:         arith.index_cast %{{.*}} : index to i32
+// CHECK:         arith.index_cast %{{.*}} : i32 to index
+func.func @keep_divui_of_widened() -> index {
+  %tid = gpu.thread_id x
+  %c127 = arith.constant 127 : index
+  %m = arith.andi %tid, %c127 : index
+  %b = arith.index_cast %m : index to i8
+  %c100 = arith.constant 100 : i8
+  %w = arith.addi %b, %c100 : i8
+  %x = arith.index_cast %w : i8 to index
+  %c2 = arith.constant 2 : index
+  %d = arith.divui %x, %c2 : index
+  %0 = arith.index_cast %d : index to i32
+  %1 = arith.index_cast %0 : i32 to index
+  return %1 : index
+}
+
+// CHECK-LABEL: func.func @keep_minui_of_widened
+// CHECK:         arith.index_cast %{{.*}} : index to i32
+// CHECK:         arith.index_cast %{{.*}} : i32 to index
+func.func @keep_minui_of_widened(%u: index) -> index {
+  %tid = gpu.thread_id x
+  %c127 = arith.constant 127 : index
+  %m = arith.andi %tid, %c127 : index
+  %b = arith.index_cast %m : index to i8
+  %c100 = arith.constant 100 : i8
+  %w = arith.addi %b, %c100 : i8
+  %x = arith.index_cast %w : i8 to index
+  %mn = arith.minui %u, %x : index
+  %0 = arith.index_cast %mn : index to i32
+  %1 = arith.index_cast %0 : i32 to index
+  return %1 : index
+}
+
+// A value that stays inside i8's signed range survives the widening, so the
+// round trip through i32 is still redundant.
+
+// CHECK-LABEL: func.func @fold_widening_within_i8
+// CHECK-NOT:     arith.index_cast %{{.*}} : index to i32
+// CHECK:         return
+func.func @fold_widening_within_i8() -> index {
+  %tid = gpu.thread_id x
+  %c63 = arith.constant 63 : index
+  %m = arith.andi %tid, %c63 : index
+  %b = arith.index_cast %m : index to i8
+  %x = arith.index_cast %b : i8 to index
+  %0 = arith.index_cast %x : index to i32
+  %1 = arith.index_cast %0 : i32 to index
+  return %1 : index
+}
+
+// A 64-bit-or-wider intermediate cannot lose anything, and must not trip the
+// shift that computes the narrowness threshold.
+
+// CHECK-LABEL: func.func @fold_i128_intermediate
+// CHECK-NOT:     arith.index_cast
+// CHECK:         return
+func.func @fold_i128_intermediate(%a: index) -> index {
+  %0 = arith.index_cast %a : index to i128
+  %1 = arith.index_cast %0 : i128 to index
+  return %1 : index
 }
