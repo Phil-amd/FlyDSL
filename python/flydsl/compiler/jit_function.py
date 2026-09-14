@@ -132,6 +132,11 @@ _CACHE_INVALIDATING_ENV_VARS = (
     "FLYDSL_COMPILE_LLVM_DIR",
     "FLYDSL_DEBUG_ENABLE_DEBUG_INFO",
     "FLYDSL_EXTRA_SOURCE_DIRS",
+    # ktrace instrumentation changes the emitted kernel, so a traced build must not be
+    # served from -- or serve -- a cache entry produced with different settings.
+    "FLYDSL_KTRACE_ENABLE",
+    "FLYDSL_KTRACE_EVENTS_PER_WAVE",
+    "FLYDSL_KTRACE_BLOCKS",
 )
 
 
@@ -1124,7 +1129,25 @@ def _build_call_state(sig, args_tuple, func_exe):
     if not has_user_stream:
         slot_specs.append((-1, ctypes.c_void_p, None))
 
-    return CallState(slot_specs, func_exe)
+    # ktrace: the trace buffer is an implicit trailing argument, so it has no entry in the
+    # signature. Its slot needs a real address -- unlike the auto-stream slot above, whose
+    # NULL selects the HIP default stream, this pointer is dereferenced by the kernel, so a
+    # null fill is an illegal memory access rather than a default.
+    # It must come after the stream slot, matching the trace-time argument order.
+    from ..expr import ktrace as _ktrace
+
+    presets = {}
+    if _ktrace.tracing_enabled():
+        from ..expr import ktrace_emit as _ktrace_emit
+        from ..utils import env as _env
+
+        if not _env.compile.compile_only:
+            # A preset, not a fill: fills index the caller's argument tuple, and this
+            # argument is implicit -- there is no tuple entry to read.
+            presets[len(slot_specs)] = _ktrace_emit.ensure_buffer().device_ptr
+            slot_specs.append((-1, ctypes.c_void_p, None))
+
+    return CallState(slot_specs, func_exe, presets)
 
 
 class JitFunction:
@@ -1482,6 +1505,7 @@ class JitFunction:
                         ):
                             warn_annotation_value_mismatch(pname, ann, dsl_type, context="@jit")
                     has_user_stream = _ensure_stream_arg(jit_args)
+                    has_ktrace_buf = _ensure_ktrace_buffer_arg(jit_args)
                     ir_types = get_ir_types(jit_args)
                     loc = func_def_location(self.func, ctx)
 
@@ -1505,8 +1529,12 @@ class JitFunction:
 
                             with ir.InsertionPoint(entry_block):
                                 ir_args = list(func_op.regions[0].blocks[0].arguments)
+                                # The ktrace buffer is appended after the stream, so it is
+                                # last when present.
+                                if has_ktrace_buf:
+                                    comp_ctx.ktrace_buf_arg = ir_args[-1]
                                 if not has_user_stream:
-                                    comp_ctx.stream_arg = ir_args[-1]
+                                    comp_ctx.stream_arg = ir_args[-2] if has_ktrace_buf else ir_args[-1]
                                 user_jit_args = jit_args[: len(param_names)]
                                 dsl_args = construct_from_ir_values(dsl_types, user_jit_args, ir_args)
                                 log().info(f"dsl_args={dsl_args}")
@@ -1602,6 +1630,36 @@ def _ensure_stream_arg(jit_args: list) -> bool:
         return True
     jit_args.append(Stream(None))
     return False
+
+
+def _ensure_ktrace_buffer_arg(jit_args: list) -> bool:
+    """Append the trace-buffer pointer to *jit_args* when tracing is enabled.
+
+    Passing the buffer as an argument rather than binding a device global keeps the kernel
+    disk-cacheable: registering a ``post_load_processors`` callback sets ``extern_linked``
+    (see :func:`_build_compiled`), which disables the disk cache for that kernel.
+
+    The pointer must be a real device address whenever the kernel can actually run: the
+    kernel dereferences it, so a null there segfaults at launch rather than raising
+    anything diagnosable.  Under ``COMPILE_ONLY`` no launch happens, and allocating would
+    require a live HIP device for an address nothing reads.
+    """
+    from ..expr import ktrace as _ktrace
+
+    if not _ktrace.tracing_enabled():
+        return False
+    from ..expr import ktrace_emit as _ktrace_emit
+    from ..expr.numeric import Int8
+    from ..utils import env
+    from .jit_argument import PointerJitArg
+
+    # Under COMPILE_ONLY nothing launches, so skip the allocation: it would need a live
+    # HIP device purely to produce an address the kernel never dereferences.
+    address = None
+    if not env.compile.compile_only:
+        address = ctypes.c_void_p(_ktrace_emit.ensure_buffer().device_ptr)
+    jit_args.append(PointerJitArg(Int8, address))
+    return True
 
 
 def jit(func: Optional[Callable] = None) -> JitFunction:
